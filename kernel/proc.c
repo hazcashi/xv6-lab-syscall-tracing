@@ -695,4 +695,14 @@ procdump(void)
   }
 }
 
+// lab 
+// this function will:
+// Take PID as parameter
+// Search through the process table
+// Return a pointer to the matching process if found; otherwise, return NULL.
+// Handle the case where PID is invalid or process doesn’t exist
+
+struct proc* find_proc_by_pid(int PID){
+
+}
 
