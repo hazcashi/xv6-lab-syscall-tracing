@@ -6,7 +6,33 @@
 #include "proc.h"
 #include "syscall.h"
 #include "defs.h"
+#define MAX_ARG_STR_LEN 32
 
+//Create a static array mapping syscall numbers to name strings
+static char *syscall_names[] = {
+  [SYS_fork]    "fork",
+  [SYS_exit]    "exit",
+  [SYS_wait]    "wait",
+  [SYS_pipe]    "pipe",
+  [SYS_read]    "read",
+  [SYS_kill]    "kill",
+  [SYS_exec]    "exec",
+  [SYS_fstat]   "fstat",
+  [SYS_chdir]   "chdir",
+  [SYS_dup]     "dup",
+  [SYS_getpid]  "getpid",
+  [SYS_sbrk]    "sbrk",
+  [SYS_sleep]   "sleep",
+  [SYS_uptime]  "uptime",
+  [SYS_open]    "open",
+  [SYS_write]   "write",
+  [SYS_mknod]   "mknod",
+  [SYS_unlink]  "unlink",
+  [SYS_link]    "link",
+  [SYS_mkdir]   "mkdir",
+  [SYS_close]   "close",
+  [SYS_trace]   "trace", 
+};
 
 // Fetch the uint64 at addr from the current process.
 int
@@ -102,6 +128,7 @@ extern uint64 sys_unlink(void);
 extern uint64 sys_link(void);
 extern uint64 sys_mkdir(void);
 extern uint64 sys_close(void);
+extern uint64 sys_trace(void);
 
 // An array mapping syscall numbers from syscall.h
 // to the function that handles the system call.
@@ -127,26 +154,78 @@ static uint64 (*syscalls[])(void) = {
 [SYS_link]    sys_link,
 [SYS_mkdir]   sys_mkdir,
 [SYS_close]   sys_close,
+[SYS_trace]   sys_trace,
 };
 
 
 
 
 
-void
+void 
 syscall(void)
 {
+
   int num;
   struct proc *p = myproc();
-
   num = p->trapframe->a7;
-  if(num > 0 && num < NELEM(syscalls) && syscalls[num]) {
-    // Use num to lookup the system call function for num, call it,
-    // and store its return value in p->trapframe->a0
-    p->trapframe->a0 = syscalls[num]();
-  } else {
+  if (num > 0 && num < NELEM(syscalls) && syscalls[num])
+  {
+
+    
+    uint64 arg0 = p->trapframe->a0; // Save first argument BEFORE syscall dispatch
+
+    p->trapframe->a0 = syscalls[num](); // Use num to lookup the system call function for num, call it, and store its return value in p->trapframe->a0
+
+
+    if (p->traced)
+    {
+      // The return value is now in p->trapframe->a0
+      uint64 ret_val = p->trapframe->a0;
+      char buf[MAX_ARG_STR_LEN]; // Buffer for string arguments
+      char *arg_str = "<bad ptr>"; // Default if string copy fails
+
+      printf("[pid %d] %s(", p->pid, syscall_names[num]);
+
+      // --- Argument Printing Logic ---
+      
+      if (num == SYS_open || num == SYS_unlink || num == SYS_chdir || 
+          num == SYS_mkdir || num == SYS_link /* ignore the second string argument of `link` */)
+      {
+        // Syscalls with a single string argument (pathname)
+        // argraw(0) is the user-space pointer to the string
+        if (fetchstr(arg0, buf, MAX_ARG_STR_LEN) > 0) {
+          arg_str = buf;
+        }
+        printf("\"%s\") = %ld\n", arg_str, ret_val);
+      }
+      else if ( num == SYS_exec )
+      {
+        // Exec syscall: Need to get argv[0], which is the program name.
+        // arg0 is the path string, argraw(1) is the user-space pointer to argv.
+        uint64 argv_ptr = argraw(1); 
+        char *argv0_ptr; // Will hold the user-space address of argv[0]
+
+        // 1. Get the address of argv[0] from the argv array pointer
+        if (fetchaddr(argv_ptr, (uint64*)&argv0_ptr) == 0) {
+            // 2. Copy the string at argv[0] into the kernel buffer
+            if (fetchstr((uint64)argv0_ptr, buf, MAX_ARG_STR_LEN) > 0) {
+              arg_str = buf;
+            }
+        }
+        
+        printf("\"%s\") = %ld\n", arg_str, ret_val);
+      }
+      else
+      {
+        // All other syscalls: Print first argument as a raw integer
+        printf("%ld) = %ld\n", arg0, ret_val);
+      }
+    }
+  }
+  else
+  {
     printf("%d %s: unknown sys call %d\n",
-            p->pid, p->name, num);
+           p->pid, p->name, num);
     p->trapframe->a0 = -1;
   }
 }

@@ -60,6 +60,11 @@ consolewrite(int user_src, uint64 src, int n)
 {
   int i;
 
+  struct proc *p = myproc();
+  if (p && p->traced) {
+    // drop output completely
+    return n;  // pretend all bytes were written
+  }
 
   for(i = 0; i < n; i++){
     char c;

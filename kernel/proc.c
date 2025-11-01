@@ -703,6 +703,16 @@ procdump(void)
 // Handle the case where PID is invalid or process doesn’t exist
 
 struct proc* find_proc_by_pid(int PID){
+  struct proc* now_proc;
+  for(now_proc = proc; now_proc < &proc[NPROC]; now_proc++) {
+    acquire(&now_proc->lock);               
+    if(now_proc->state != UNUSED && now_proc->pid == PID) {
+      release(&now_proc->lock);            
+      return now_proc;                      
+    }
+    release(&now_proc->lock);               
+  }
 
+  return 0; 
 }
 
